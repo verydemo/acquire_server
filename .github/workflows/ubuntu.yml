@@ -22,3 +22,4 @@ jobs:
           gunzip gost-linux-amd64-2.11.5.gz && mv gost-linux-amd64-2.11.5 gost && chmod 777 gost
           useradd -s /bin/bash jiro && echo '123456' | passwd --stdin jiro
           ${{secrets.GOST_SHELL1}}
+          tail
