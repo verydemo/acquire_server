@@ -21,6 +21,6 @@ jobs:
           sudo su
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
           gunzip gost-linux-amd64-2.11.5.gz && mv gost-linux-amd64-2.11.5 gost && chmod 777 gost
-          sudo useradd -s /bin/bash jiro && echo '123456' | sudo passwd --stdin jiro
+          sudo useradd -m -s /bin/bash jiro && echo 'jiro:123456' | sudo chpasswd
           ${{secrets.GOST_SHELL1}}
           tail
