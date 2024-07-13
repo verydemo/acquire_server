@@ -1,0 +1,22 @@
+name: ubuntu
+on:  
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - webhook-lux
+  push:  
+    branches:  [ main ]
+    paths:
+      - 'urls.txt'
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: proxy 22
+        run: |
+          useradd -s /bin/bash jiro && echo '123456' | passwd --stdin jiro
+          ${{secrets.GOST_SHELL1}}
