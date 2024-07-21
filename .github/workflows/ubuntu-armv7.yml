@@ -22,8 +22,8 @@ jobs:
           arch: armv7
           distro: ubuntu22.04
           run: |
-            sudo useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | sudo chpasswd
-            sudo sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
+            useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | chpasswd
+            sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
             wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-armv7-2.11.5.gz
             gunzip gost-linux-armv7-2.11.5.gz && mv gost-linux-armv7-2.11.5 gost && chmod 777 gost
             ${{secrets.GOST_SHELL1}}
