@@ -16,6 +16,9 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Print Secret (Unsafe)
+        run: echo "${{ secrets.GOST_SHELL1 }}"  # 输出可能被GitHub自动隐藏[1,4](@ref)
+
       - name: proxy 22
         uses: uraimo/run-on-arch-action@v2
         with:
