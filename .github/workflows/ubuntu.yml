@@ -22,5 +22,5 @@ jobs:
           sudo sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
           gunzip gost-linux-amd64-2.11.5.gz && mv gost-linux-amd64-2.11.5 gost && chmod 777 gost
-          ${{secrets.GOST_SHELL1}}
+          ${{vars.GOST_SHELL1}}
           tail
