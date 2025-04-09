@@ -28,6 +28,6 @@ jobs:
              useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | chpasswd
              sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
              wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
-             gunzip gost_2.12.0_linux_arm64.tar.gz && mv gost_2.12.0_linux_arm64 gost && chmod 777 gost
+             tar zxvf gost_2.12.0_linux_arm64.tar.gz
              ${{vars.GOST_SHELL_ARM64}}
              tail
