@@ -18,6 +18,11 @@ jobs:
 
       - name: proxy 22
         run: |
+          sudo systemctl stop docker
+          sudo mkdir -p /mnt/lib/docker
+          echo '{ "exec-opts": ["native.cgroupdriver=cgroupfs"], "cgroup-parent": "/actions_job","data-root": "/mnt/lib/docker"}' | sudo tee /etc/docker/daemon.json > /dev/null 
+          sudo systemctl daemon-reload
+          sudo systemctl start docker
           sudo useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | sudo chpasswd
           sudo sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
