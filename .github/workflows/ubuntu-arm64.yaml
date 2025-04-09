@@ -1,0 +1,27 @@
+name: ubuntu-arm64
+on:  
+  workflow_dispatch:
+  repository_dispatch:
+    types:
+      - webhook-arm64
+
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: proxy 22
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: arm64
+          distro: ubuntu-latest
+          run: |
+            useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | chpasswd
+            sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
+            wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
+            gunzip gost_2.12.0_linux_arm64.tar.gz && mv gost_2.12.0_linux_arm64 gost && chmod 777 gost
+            ${{ vars.GOST_SHELL_ARM64 }}
+            tail
