@@ -1,0 +1,19 @@
+name: macos
+on:  
+  workflow_dispatch:
+
+      
+jobs:
+  build:
+    runs-on: macos-13
+    steps:
+      - name: view cpu
+        run: |
+          sysctl -n machdep.cpu.brand_string
+          sw_vers
+          df -h
+          echo "CPU型号: $(sysctl -n machdep.cpu.brand_string)" && \
+          echo "系统版本: $(sw_vers -productVersion)" && \
+          echo "硬盘信息: $(diskutil info disk0 | grep 'Total Size')"
+          
+          
