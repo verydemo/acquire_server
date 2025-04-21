@@ -20,7 +20,7 @@ jobs:
           sudo whoami
           sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
-          sudo echo "root:nihao" | chpasswd
+          sudo sh -c 'echo "root:nihao" | chpasswd'
           wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
           tar zxvf gost_2.12.0_linux_arm64.tar.gz
           ${{vars.GOST_SHELL_ARM}}
