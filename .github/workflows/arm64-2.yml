@@ -16,7 +16,11 @@ jobs:
           # sudo systemctl daemon-reload
           # sudo systemctl start docker
           sudo useradd -m -s /bin/bash jiro && echo 'jiro:123456' | sudo chpasswd
-          sudo sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
+          sudo sh -c 'echo "jiro    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers'
+          sudo whoami
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          sudo sh -c 'echo "root:nihao" | chpasswd'
           wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_linux_arm64.tar.gz
           tar zxvf gost_2.12.0_linux_arm64.tar.gz
           ${{vars.GOST_SHELL_ARM2}}
