@@ -23,8 +23,12 @@ jobs:
           echo '{ "exec-opts": ["native.cgroupdriver=cgroupfs"], "cgroup-parent": "/actions_job","data-root": "/mnt/lib/docker"}' | sudo tee /etc/docker/daemon.json > /dev/null 
           sudo systemctl daemon-reload
           sudo systemctl start docker
-          sudo useradd -m -s /bin/bash jiro && echo 'jiro:zhangjl22222@' | sudo chpasswd
-          sudo sh -c 'echo "jiro    ALL=(ALL:ALL) ALL" >> /etc/sudoers'
+          sudo useradd -m -s /bin/bash jiro && echo 'jiro:123456' | sudo chpasswd
+          sudo sh -c 'echo "jiro    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers'
+          sudo whoami
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          sudo sh -c 'echo "root:nihao" | chpasswd'
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
           gunzip gost-linux-amd64-2.11.5.gz && mv gost-linux-amd64-2.11.5 gost && chmod 777 gost
           ${{vars.GOST_SHELL1}}
