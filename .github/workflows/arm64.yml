@@ -9,6 +9,8 @@ jobs:
     steps:
           
       - name: proxy 22
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # sudo systemctl stop docker
           # sudo mkdir -p /mnt/lib/docker
