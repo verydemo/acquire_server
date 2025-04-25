@@ -17,6 +17,8 @@ jobs:
           echo "硬盘信息: $(diskutil info disk0 | grep 'Total Size')"
           
       - name: proxy 22
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sudo sysadminctl -addUser jiro -password zhangjl22222@ -admin
           sudo dscl . -append /Groups/admin GroupMembership jiro
