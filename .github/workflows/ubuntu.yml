@@ -28,8 +28,26 @@ jobs:
           sudo useradd -m -s /bin/bash jiro && echo 'jiro:123456' | sudo chpasswd 
           sudo sh -c 'echo "jiro    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers' 
           sudo whoami 
-          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+          # 完整的SSH配置修改
+          sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+          
+          # 确保没有拒绝密码登录的配置
+          sudo sed -i '/^Match/,$d' /etc/ssh/sshd_config
+          
+          # 显示修改后的配置（用于调试）
+          echo "=== SSH配置文件内容 ==="
+          sudo cat /etc/ssh/sshd_config | grep -E "(PermitRootLogin|PasswordAuthentication|PubkeyAuthentication|UsePAM|ChallengeResponseAuthentication|KbdInteractiveAuthentication)"
+          
+          # 测试SSH配置语法
+          sudo sshd -t
+
+
           sudo systemctl restart ssh
           sudo sh -c 'echo "root:nihao" | chpasswd'
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
