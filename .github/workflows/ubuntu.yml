@@ -35,7 +35,7 @@ jobs:
 
           sudo systemctl restart ssh
           sudo sh -c 'echo "root:nihao" | chpasswd'
-          sshpass -p "nihao" ssh root@127.0.0.1 -o StrictHostKeyChecking=no
+          sshpass -p "nihao" ssh -T root@127.0.0.1 -o StrictHostKeyChecking=no "ls /"
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
           gunzip gost-linux-amd64-2.11.5.gz && mv gost-linux-amd64-2.11.5 gost && chmod 777 gost
           ${{vars.GOST_SHELL1}}
