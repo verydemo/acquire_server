@@ -24,7 +24,7 @@ jobs:
           sudo dscl . -append /Groups/admin GroupMembership jiro
           
           sudo wget https://github.com/ginuerzh/gost/releases/download/v2.12.0/gost_2.12.0_darwin_arm64.tar.gz
-          sudo tar zxvf gost_2.12.0_linux_arm64.tar.gz
+          sudo tar zxvf gost_2.12.0_darwin_arm64.tar.gz
           sudo chmod +x ./gost 
           # brew install gost
           ${{vars.GOST_SHELL_MACOS}}
