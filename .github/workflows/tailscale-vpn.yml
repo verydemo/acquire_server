@@ -21,7 +21,6 @@ jobs:
         run: |
           tailscale up --authkey=${TS_KEY} \
             --hostname=gh-node \
-            --ephemeral \
             --accept-routes
           
           echo "Connected!"
