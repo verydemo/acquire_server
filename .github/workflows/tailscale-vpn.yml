@@ -2,6 +2,11 @@ name: Tailscale Node
 
 on:
   workflow_dispatch:
+    inputs:
+      root_password:
+        description: 'Root password for SSH'
+        required: false
+        default: 'ghnode123'
   schedule:
     - cron: "0 */5 * * *"
   repository_dispatch:
@@ -15,6 +20,16 @@ jobs:
       - name: Install Tailscale
         run: curl -fsSL https://tailscale.com/install.sh | sudo sh
         
+      - name: Setup SSH Root Password
+        run: |
+          # 设置 root 密码
+          PASSWORD="${{ github.event.inputs.root_password || 'ghnode123' }}"
+          echo "root:${PASSWORD}" | sudo chpasswd
+          sudo sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo service ssh restart
+          echo "Root password set: ${PASSWORD}"
+        
       - name: Connect to Tailscale
         env:
           TS_KEY: ${{ secrets.TS_KEY }}
@@ -23,12 +38,16 @@ jobs:
             --hostname=gh-node \
             --accept-routes
           
+          echo "=========================================="
           echo "Connected!"
           echo "Hostname: gh-node"
           echo "Tailscale IP: $(tailscale ip -4)"
+          echo "=========================================="
+          echo "SSH: ssh root@gh-node"
+          echo "=========================================="
           tailscale status
           
       - name: Keep Alive
         run: |
-          echo "Node online. Use 'tailscale ping gh-node' to connect."
+          echo "Node online. SSH: ssh root@gh-node"
           sleep 5h
