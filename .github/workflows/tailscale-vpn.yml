@@ -13,13 +13,13 @@ jobs:
     
     steps:
       - name: Install Tailscale
-        run: curl -fsSL https://tailscale.com/install.sh | sh
+        run: curl -fsSL https://tailscale.com/install.sh | sudo sh
         
       - name: Connect to Tailscale
         env:
           TS_KEY: ${{ secrets.TS_KEY }}
         run: |
-          tailscale up --authkey=${TS_KEY} \
+          sudo tailscale up --authkey=${TS_KEY} \
             --hostname=gh-node \
             --accept-routes
           
