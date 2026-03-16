@@ -1,4 +1,4 @@
-name: Tailscale Exit Node
+name: Tailscale Node
 
 on:
   workflow_dispatch:
@@ -7,49 +7,29 @@ on:
   repository_dispatch:
 
 jobs:
-  exit-node:
+  connect:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     
     steps:
       - name: Install Tailscale
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          
+        run: curl -fsSL https://tailscale.com/install.sh | sh
+        
       - name: Connect to Tailscale
         env:
           TS_KEY: ${{ secrets.TS_KEY }}
         run: |
           tailscale up --authkey=${TS_KEY} \
-            --hostname=gh-relay \
+            --hostname=gh-node \
             --ephemeral \
-            --advertise-exit-node \
             --accept-routes
-            
-      - name: Wait for approval
-        run: |
-          echo "Waiting for exit node approval..."
-          sleep 10
+          
+          echo "Connected!"
+          echo "Hostname: gh-node"
+          echo "Tailscale IP: $(tailscale ip -4)"
           tailscale status
-          
-      - name: Install gost proxy
-        run: |
-          wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
-          gunzip gost-linux-amd64-2.11.5.gz
-          chmod +x gost-linux-amd64-2.11.5
-          sudo mv gost-linux-amd64-2.11.5 /usr/local/bin/gost
-          
-          TS_IP=$(tailscale ip -4)
-          echo "Tailscale IP: $TS_IP"
-          
-          gost -L="socks5://${TS_IP}:1080" -L="http://${TS_IP}:8080" &
           
       - name: Keep Alive
         run: |
-          echo "Exit Node Running!"
-          echo "Hostname: gh-relay"
-          echo "Tailnet: tail4fd26d.ts.net"
-          echo "Client: tailscale up --exit-node=gh-relay"
-          echo "Proxy: export ALL_PROXY=socks5://gh-relay:1080"
-          
+          echo "Node online. Use 'tailscale ping gh-node' to connect."
           sleep 5h
