@@ -1,5 +1,4 @@
 name: Cloudflare Tunnel Proxy Node
-# Manual trigger only - no scheduled runs
 
 on:
   workflow_dispatch:
