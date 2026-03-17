@@ -15,8 +15,6 @@ on:
         description: 'Tunnel mode: quick (no account needed) / named (needs CF token)'
         required: false
         default: 'quick'
-  schedule:
-    - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:
