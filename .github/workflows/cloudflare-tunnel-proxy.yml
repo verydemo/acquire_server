@@ -370,7 +370,7 @@ jobs:
             CF_HOST=$(echo "${TUNNEL_URL}" | sed 's|https://||')
             VLESS_LINK="vless://${VLESS_UUID}@${CF_HOST}:443?encryption=none&security=tls&sni=${CF_HOST}&type=ws&host=${CF_HOST}&path=%2Fws#GH-CF-Proxy"
 
-            message=$(cat <<EOF
+            message=$(cat <<-EOF
 {
   "msgtype": "markdown",
   "markdown": {
@@ -378,17 +378,17 @@ jobs:
     "text": "## 🚀 Cloudflare Tunnel Proxy Ready\n\n**Proxy Mode:** ${PROXY_MODE}\n\n**Tunnel URL:** ${TUNNEL_URL}\n\n### VLESS Link\n\`\`\`\n${VLESS_LINK}\n\`\`\`\n\n### Config\n| Parameter | Value |\n|-----------|-------|\n| Address | ${CF_HOST} |\n| Port | 443 |\n| UUID | ${VLESS_UUID} |\n| WS Path | /ws |\n| TLS | enabled |\n\n**SSH Tunnel:** ${SSH_TUNNEL_URL}\n"
   }
 }
-EOF
+		EOF
 )
           else
-            message=$(cat <<EOF
+            message=$(cat <<-EOF
 {
   "msgtype": "text",
   "text": {
     "content": "🚀 Cloudflare Tunnel Proxy Ready\n\nProxy Mode: ${PROXY_MODE}\nTunnel URL: ${TUNNEL_URL}\nSSH: ${SSH_TUNNEL_URL}\n\nShadowsocks config:\n  Server: ${TUNNEL_URL}\n  Port: 443\n  Cipher: aes-256-gcm"
   }
 }
-EOF
+		EOF
 )
           fi
 
