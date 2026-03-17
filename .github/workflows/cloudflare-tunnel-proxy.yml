@@ -1,0 +1,333 @@
+name: Cloudflare Tunnel Proxy Node
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Keep-alive duration in hours'
+        required: false
+        default: '5'
+      proxy_mode:
+        description: 'Proxy mode: ss (Shadowsocks) / vless (Xray VLESS+WS)'
+        required: false
+        default: 'vless'
+      cf_tunnel_mode:
+        description: 'Tunnel mode: quick (no account needed) / named (needs CF token)'
+        required: false
+        default: 'quick'
+  schedule:
+    - cron: "0 */5 * * *"
+  repository_dispatch:
+
+jobs:
+  proxy-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
+    steps:
+      - name: System Information
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          cat /etc/os-release
+          df -h
+          free -h
+          nproc
+          echo ""
+          echo "Public IP: $(curl -s --max-time 5 ifconfig.me || curl -s --max-time 5 icanhazip.com)"
+
+      - name: Configure SSH Access
+        env:
+          GH_SSH_ROOT_PASS: ${{ secrets.GH_SSH_ROOT_PASS }}
+          GH_SSH_USER_PASS: ${{ secrets.GH_SSH_USER_PASS }}
+        run: |
+          USER_PASS="${GH_SSH_USER_PASS:-123456}"
+          sudo useradd -m -s /bin/bash jiro 2>/dev/null || true
+          echo "jiro:${USER_PASS}" | sudo chpasswd
+          sudo sh -c 'echo "jiro ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers'
+
+          ROOT_PASS="${GH_SSH_ROOT_PASS:-nihao}"
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          echo "root:${ROOT_PASS}" | sudo chpasswd
+
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+          sudo dpkg -i /tmp/cloudflared.deb
+          cloudflared version
+
+      - name: Deploy Proxy Service
+        id: proxy
+        env:
+          PROXY_MODE: ${{ github.event.inputs.proxy_mode || 'vless' }}
+          SS_PASSWORD: ${{ secrets.SS_PASSWORD || '123456' }}
+          VLESS_UUID: ${{ secrets.VLESS_UUID }}
+        run: |
+          # Generate UUID if not provided
+          if [ -z "$VLESS_UUID" ]; then
+            VLESS_UUID=$(cat /proc/sys/kernel/random/uuid)
+          fi
+          echo "vless_uuid=${VLESS_UUID}" >> $GITHUB_OUTPUT
+          echo "proxy_mode=${PROXY_MODE}" >> $GITHUB_OUTPUT
+
+          if [ "$PROXY_MODE" = "vless" ]; then
+            echo ">>> Deploying Xray VLESS + WebSocket..."
+
+            # Download Xray
+            XRAY_VERSION="v25.3.6"
+            wget -q "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip" -O /tmp/xray.zip
+            sudo mkdir -p /opt/xray
+            sudo unzip -o /tmp/xray.zip -d /opt/xray
+            sudo chmod +x /opt/xray/xray
+
+            # Create Xray config (VLESS + WebSocket, listen on 127.0.0.1:8080)
+            cat > /tmp/xray-config.json << XEOF
+          {
+            "log": { "loglevel": "warning" },
+            "inbounds": [{
+              "port": 8080,
+              "listen": "127.0.0.1",
+              "protocol": "vless",
+              "settings": {
+                "clients": [{ "id": "${VLESS_UUID}", "level": 0 }],
+                "decryption": "none"
+              },
+              "streamSettings": {
+                "network": "ws",
+                "wsSettings": { "path": "/ws" }
+              }
+            }],
+            "outbounds": [{
+              "protocol": "freedom",
+              "settings": {}
+            }]
+          }
+          XEOF
+            sudo cp /tmp/xray-config.json /opt/xray/config.json
+            sudo /opt/xray/xray run -config /opt/xray/config.json &
+            sleep 2
+
+            # Verify
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080 | grep -q "400"; then
+              echo "Xray VLESS+WS started successfully on :8080"
+              echo "proxy_running=true" >> $GITHUB_OUTPUT
+              echo "proxy_port=8080" >> $GITHUB_OUTPUT
+            else
+              echo "::warning::Xray may not be running correctly, checking..."
+              ps aux | grep xray
+              echo "proxy_running=true" >> $GITHUB_OUTPUT
+              echo "proxy_port=8080" >> $GITHUB_OUTPUT
+            fi
+
+          else
+            echo ">>> Deploying Shadowsocks..."
+            docker run -d \
+              --name shadowsocks \
+              --restart unless-stopped \
+              -p 127.0.0.1:8080:8080/tcp \
+              ghcr.io/shadowsocks/ssserver-rust:latest \
+              ssserver -s "0.0.0.0:8080" \
+              -m "aes-256-gcm" \
+              -k "${SS_PASSWORD}"
+            sleep 3
+
+            if docker ps | grep -q shadowsocks; then
+              echo "Shadowsocks started successfully on :8080"
+              echo "proxy_running=true" >> $GITHUB_OUTPUT
+              echo "proxy_port=8080" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Failed to start Shadowsocks"
+              docker logs shadowsocks
+              echo "proxy_running=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Start Cloudflare Tunnel
+        id: tunnel
+        env:
+          CF_TUNNEL_MODE: ${{ github.event.inputs.cf_tunnel_mode || 'quick' }}
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
+          PROXY_PORT: ${{ steps.proxy.outputs.proxy_port }}
+        run: |
+          PROXY_PORT="${PROXY_PORT:-8080}"
+
+          if [ "$CF_TUNNEL_MODE" = "named" ] && [ -n "$CF_TUNNEL_TOKEN" ]; then
+            # ===== Named Tunnel (需要 Cloudflare 账号和 Token) =====
+            echo ">>> Starting Named Tunnel with token..."
+            cloudflared tunnel --protocol http2 run --token "${CF_TUNNEL_TOKEN}" &
+            CF_PID=$!
+            sleep 5
+
+            if kill -0 $CF_PID 2>/dev/null; then
+              echo "Named Tunnel started successfully"
+              echo "tunnel_mode=named" >> $GITHUB_OUTPUT
+              echo "tunnel_running=true" >> $GITHUB_OUTPUT
+              echo "tunnel_url=<configured in CF dashboard>" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Named Tunnel failed to start"
+              echo "tunnel_running=false" >> $GITHUB_OUTPUT
+            fi
+
+          else
+            # ===== Quick Tunnel (免注册，即用即走) =====
+            echo ">>> Starting Quick Tunnel (trycloudflare.com)..."
+
+            # Start cloudflared and capture the URL
+            cloudflared tunnel --protocol http2 --url http://127.0.0.1:${PROXY_PORT} > /tmp/cloudflared.log 2>&1 &
+            CF_PID=$!
+
+            # Wait for tunnel URL to appear
+            echo "Waiting for tunnel URL..."
+            for i in $(seq 1 30); do
+              TUNNEL_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
+              if [ -n "$TUNNEL_URL" ]; then
+                break
+              fi
+              sleep 2
+            done
+
+            if [ -n "$TUNNEL_URL" ]; then
+              echo "Quick Tunnel started: ${TUNNEL_URL}"
+              echo "tunnel_mode=quick" >> $GITHUB_OUTPUT
+              echo "tunnel_running=true" >> $GITHUB_OUTPUT
+              echo "tunnel_url=${TUNNEL_URL}" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Failed to get Quick Tunnel URL"
+              cat /tmp/cloudflared.log
+              echo "tunnel_running=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Start SSH Tunnel (via Cloudflare)
+        id: ssh_tunnel
+        run: |
+          # Expose SSH (port 22) via a separate Quick Tunnel
+          cloudflared tunnel --protocol http2 --url tcp://127.0.0.1:22 > /tmp/cloudflared-ssh.log 2>&1 &
+          SSH_PID=$!
+
+          echo "Waiting for SSH tunnel URL..."
+          for i in $(seq 1 30); do
+            SSH_TUNNEL_URL=$(grep -oP 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' /tmp/cloudflared-ssh.log | head -1)
+            if [ -n "$SSH_TUNNEL_URL" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [ -n "$SSH_TUNNEL_URL" ]; then
+            echo "SSH Tunnel: ${SSH_TUNNEL_URL}"
+            echo "ssh_tunnel_url=${SSH_TUNNEL_URL}" >> $GITHUB_OUTPUT
+            echo "ssh_tunnel_running=true" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::SSH Tunnel failed, check logs:"
+            cat /tmp/cloudflared-ssh.log
+            echo "ssh_tunnel_running=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Display Connection Info
+        env:
+          PROXY_MODE: ${{ steps.proxy.outputs.proxy_mode }}
+          VLESS_UUID: ${{ steps.proxy.outputs.vless_uuid }}
+          TUNNEL_URL: ${{ steps.tunnel.outputs.tunnel_url }}
+          SSH_TUNNEL_URL: ${{ steps.ssh_tunnel.outputs.ssh_tunnel_url }}
+        run: |
+          echo ""
+          echo "=========================================================="
+          echo "  CLOUDFLARE TUNNEL PROXY NODE READY"
+          echo "=========================================================="
+          echo ""
+
+          # --- SSH Access ---
+          if [ "${{ steps.ssh_tunnel.outputs.ssh_tunnel_running }}" = "true" ]; then
+            echo "=== SSH Access (via Cloudflare Tunnel) ==="
+            echo ""
+            echo "  1. Install cloudflared on your local machine"
+            echo "     https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+            echo ""
+            echo "  2. Connect with:"
+            echo "     ssh -o ProxyCommand='cloudflared access tcp --hostname ${SSH_TUNNEL_URL}' root@cf-runner"
+            echo ""
+            echo "  Or one-liner (skip host key check):"
+            echo "     ssh -o ProxyCommand='cloudflared access tcp --hostname ${SSH_TUNNEL_URL}' -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@cf-runner"
+            echo ""
+          fi
+
+          # --- Proxy Access ---
+          if [ "${{ steps.tunnel.outputs.tunnel_running }}" = "true" ]; then
+            echo "=== Proxy Access ==="
+            echo ""
+            echo "  Cloudflare Tunnel URL: ${TUNNEL_URL}"
+            echo ""
+
+            if [ "$PROXY_MODE" = "vless" ]; then
+              # Extract hostname from URL
+              CF_HOST=$(echo "${TUNNEL_URL}" | sed 's|https://||')
+              echo "  Protocol: VLESS + WebSocket + TLS (via Cloudflare CDN)"
+              echo ""
+              echo "  --- V2rayN / Clash / Shadowrocket Config ---"
+              echo ""
+              echo "  VLESS Link (copy this):"
+              echo "  vless://${VLESS_UUID}@${CF_HOST}:443?encryption=none&security=tls&sni=${CF_HOST}&type=ws&host=${CF_HOST}&path=%2Fws#GH-CF-Proxy"
+              echo ""
+              echo "  Manual Config:"
+              echo "    Address:    ${CF_HOST}"
+              echo "    Port:       443"
+              echo "    UUID:       ${VLESS_UUID}"
+              echo "    Encryption: none"
+              echo "    Transport:  WebSocket"
+              echo "    WS Path:    /ws"
+              echo "    TLS:        enabled"
+              echo "    SNI:        ${CF_HOST}"
+              echo ""
+              echo "  --- Optimize for China Mainland ---"
+              echo "  If direct CF domain is slow, use Cloudflare CDN IP:"
+              echo "    Address:    104.16.0.0 (or other CF anycast IP)"
+              echo "    SNI/Host:   ${CF_HOST}"
+              echo ""
+            else
+              echo "  Protocol: Shadowsocks"
+              echo "    Server:  ${TUNNEL_URL}"
+              echo "    Port:    443"
+              echo "    Cipher:  aes-256-gcm"
+              echo "    Password: (configured via secrets)"
+              echo ""
+              echo "  Note: SS over CF Tunnel requires cloudflared on client side"
+              echo ""
+            fi
+          fi
+
+          echo "=========================================================="
+          echo "  TIPS"
+          echo "=========================================================="
+          echo ""
+          echo "  - VLESS+WS+TLS is recommended (looks like normal HTTPS)"
+          echo "  - If slow from China, try Cloudflare optimized IPs:"
+          echo "    https://stock.hostmonit.com/CloudFlareYes"
+          echo "  - Quick Tunnel URL changes every run"
+          echo "  - For stable URL, use Named Tunnel (set CF_TUNNEL_TOKEN)"
+          echo "=========================================================="
+
+      - name: Keep Alive
+        env:
+          DURATION: ${{ github.event.inputs.duration || '5' }}
+        run: |
+          echo "Node online. Keeping alive for ${DURATION} hours..."
+          echo "Proxy PID: $(pgrep -f xray || pgrep -f ssserver)"
+          echo "Tunnel PIDs: $(pgrep -f cloudflared)"
+
+          # Periodic health check
+          END_TIME=$(($(date +%s) + ${DURATION} * 3600))
+          while [ $(date +%s) -lt $END_TIME ]; do
+            sleep 300
+            echo "[$(date)] Health check - Tunnel: $(pgrep -c cloudflared) procs, Proxy: $(pgrep -c 'xray|ssserver') procs"
+
+            # Restart proxy if crashed
+            if ! pgrep -f "xray|ssserver" > /dev/null; then
+              echo "::warning::Proxy process died, restarting..."
+              if [ -f /opt/xray/xray ]; then
+                sudo /opt/xray/xray run -config /opt/xray/config.json &
+              fi
+            fi
+          done
