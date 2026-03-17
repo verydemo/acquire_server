@@ -1,0 +1,138 @@
+name: GOST + Tailscale Hybrid Node (ARM64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Keep-alive duration in hours'
+        required: false
+        default: '5'
+      hostname:
+        description: 'Tailscale hostname prefix'
+        required: false
+        default: 'gh-hybrid-arm'
+  schedule:
+    - cron: "0 */5 * * *"
+  repository_dispatch:
+
+jobs:
+  hybrid-node:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 330
+
+    steps:
+      - name: System Information
+        run: |
+          echo "=== ARM64 System Info ==="
+          uname -a
+          arch
+          cat /etc/os-release
+          df -h
+          free -h
+          nproc
+
+      - name: Configure SSH Access
+        env:
+          GH_SSH_ROOT_PASS: ${{ secrets.GH_SSH_ROOT_PASS }}
+          GH_SSH_USER_PASS: ${{ secrets.GH_SSH_USER_PASS }}
+        run: |
+          USER_PASS="${GH_SSH_USER_PASS:-123456}"
+          sudo useradd -m -s /bin/bash jiro 2>/dev/null || true
+          echo "jiro:${USER_PASS}" | sudo chpasswd
+          sudo sh -c 'echo "jiro ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers'
+
+          ROOT_PASS="${GH_SSH_ROOT_PASS:-nihao}"
+          sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+          echo "root:${ROOT_PASS}" | sudo chpasswd
+
+          echo "SSH configured: ssh root@localhost or ssh jiro@localhost"
+
+      - name: Install GOST (ARM64)
+        run: |
+          GOST_VERSION="2.12.0"
+          wget -q https://github.com/ginuerzh/gost/releases/download/v${GOST_VERSION}/gost_${GOST_VERSION}_linux_arm64.tar.gz
+          tar -xzf gost_${GOST_VERSION}_linux_arm64.tar.gz
+          sudo mv gost /usr/local/bin/
+          sudo chmod +x /usr/local/bin/gost
+          gost -V
+          echo "GOST installed: $(gost -V)"
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sudo sh
+          echo "Tailscale installed: $(tailscale version)"
+
+      - name: Start GOST Tunnel
+        env:
+          GOST_SHELL_HYBRID_ARM: ${{ vars.GOST_SHELL_HYBRID_ARM }}
+        run: |
+          if [ -n "$GOST_SHELL_HYBRID_ARM" ]; then
+            echo "Starting GOST with custom configuration..."
+            nohup $GOST_SHELL_HYBRID_ARM > /tmp/gost.log 2>&1 &
+          else
+            echo "Starting GOST with default SOCKS5 proxy..."
+            nohup gost -L socks5://:1080 -L http://:8080 > /tmp/gost.log 2>&1 &
+          fi
+
+          sleep 2
+          echo "GOST process: $(pgrep gost)"
+          echo "GOST logs:"
+          tail -5 /tmp/gost.log
+
+      - name: Connect to Tailscale
+        id: tailscale
+        env:
+          TS_KEY: ${{ secrets.TS_KEY }}
+          TS_HOSTNAME: ${{ github.event.inputs.hostname || 'gh-hybrid-arm' }}
+        run: |
+          if [ -z "$TS_KEY" ]; then
+            echo "::warning::TS_KEY secret not configured. Skipping Tailscale connection."
+            echo "tailscale_connected=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          sudo tailscale up --authkey=${TS_KEY} \
+            --hostname=${TS_HOSTNAME}-$(date +%s) \
+            --accept-routes \
+            --ssh
+
+          TS_IP=$(tailscale ip -4)
+          echo "tailscale_connected=true" >> $GITHUB_OUTPUT
+          echo "tailscale_ip=${TS_IP}" >> $GITHUB_OUTPUT
+
+          echo "=========================================="
+          echo "Tailscale Connected!"
+          echo "Hostname: ${TS_HOSTNAME}"
+          echo "Tailscale IP: ${TS_IP}"
+          echo "=========================================="
+
+      - name: Display Connection Info
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "  ARM64 HYBRID NODE READY"
+          echo "=========================================="
+          echo ""
+          echo "SSH Access:"
+          echo "  - ssh root@localhost (password: configured via secrets)"
+          echo "  - ssh jiro@localhost (password: configured via secrets)"
+          echo ""
+          echo "GOST Proxy:"
+          echo "  - SOCKS5: localhost:1080"
+          echo "  - HTTP:   localhost:8080"
+          echo ""
+          if [ "${{ steps.tailscale.outputs.tailscale_connected }}" = "true" ]; then
+            echo "Tailscale Network:"
+            echo "  - IP: ${{ steps.tailscale.outputs.tailscale_ip }}"
+            echo "  - SSH: ssh root@${{ steps.tailscale.outputs.tailscale_ip }}"
+          fi
+          echo "=========================================="
+
+      - name: Keep Alive
+        env:
+          DURATION: ${{ github.event.inputs.duration || '5' }}
+        run: |
+          echo "ARM64 Hybrid node online. Keeping alive for ${DURATION} hours..."
+          sleep ${DURATION}h
