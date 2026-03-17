@@ -239,10 +239,20 @@ jobs:
           echo "=========================================================="
           echo ""
 
+          # --- Output to GitHub Step Summary for API access ---
+          echo "## 🚀 Cloudflare Tunnel Proxy Node Ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           # --- SSH Access ---
           if [ "${{ steps.ssh_tunnel.outputs.ssh_tunnel_running }}" = "true" ]; then
             echo "=== SSH Access (via Cloudflare Tunnel) ==="
             echo ""
+            echo "**SSH Tunnel:** \`${SSH_TUNNEL_URL}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "ssh -o ProxyCommand='cloudflared access tcp --hostname ${SSH_TUNNEL_URL}' root@cf-runner" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "  1. Install cloudflared on your local machine"
             echo "     https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
             echo ""
@@ -264,12 +274,32 @@ jobs:
             if [ "$PROXY_MODE" = "vless" ]; then
               # Extract hostname from URL
               CF_HOST=$(echo "${TUNNEL_URL}" | sed 's|https://||')
+              VLESS_LINK="vless://${VLESS_UUID}@${CF_HOST}:443?encryption=none&security=tls&sni=${CF_HOST}&type=ws&host=${CF_HOST}&path=%2Fws#GH-CF-Proxy"
+
+              # Output to Step Summary
+              echo "### 🔗 VLESS Connection" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**VLESS Link (copy to client):**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "${VLESS_LINK}" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Address | \`${CF_HOST}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| Port | \`443\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| UUID | \`${VLESS_UUID}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| Transport | WebSocket |" >> $GITHUB_STEP_SUMMARY
+              echo "| WS Path | \`/ws\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| TLS | enabled |" >> $GITHUB_STEP_SUMMARY
+
               echo "  Protocol: VLESS + WebSocket + TLS (via Cloudflare CDN)"
               echo ""
               echo "  --- V2rayN / Clash / Shadowrocket Config ---"
               echo ""
               echo "  VLESS Link (copy this):"
-              echo "  vless://${VLESS_UUID}@${CF_HOST}:443?encryption=none&security=tls&sni=${CF_HOST}&type=ws&host=${CF_HOST}&path=%2Fws#GH-CF-Proxy"
+              echo "  ${VLESS_LINK}"
               echo ""
               echo "  Manual Config:"
               echo "    Address:    ${CF_HOST}"
