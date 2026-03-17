@@ -66,22 +66,14 @@ jobs:
           echo "Tailscale installed: $(tailscale version)"
 
       - name: Start GOST Tunnel
-        env:
-          GOST_SHELL_HYBRID: ${{ vars.GOST_SHELL_HYBRID }}
         run: |
-          # Start GOST in background
-          if [ -n "$GOST_SHELL_HYBRID" ]; then
-            echo "Starting GOST with custom configuration..."
-            nohup $GOST_SHELL_HYBRID > /tmp/gost.log 2>&1 &
-          else
-            echo "Starting GOST with default SOCKS5 proxy..."
-            nohup gost -L socks5://:1080 -L http://:8080 > /tmp/gost.log 2>&1 &
-          fi
+          # Start GOST Shadowsocks VPN tunnel
+          echo "Starting GOST Shadowsocks tunnel on port 8888..."
+          nohup gost -L=ss2://AEAD_CHACHA20_POLY1305:123456@:8888 > /tmp/gost.log 2>&1 &
 
           sleep 2
           echo "GOST process: $(pgrep gost)"
-          echo "GOST logs:"
-          tail -5 /tmp/gost.log
+          echo "GOST Shadowsocks tunnel running on :8888"
 
       - name: Connect to Tailscale
         id: tailscale
@@ -96,7 +88,7 @@ jobs:
           fi
 
           sudo tailscale up --authkey=${TS_KEY} \
-            --hostname=${TS_HOSTNAME}-$(date +%s) \
+            --hostname=${TS_HOSTNAME} \
             --accept-routes \
             --ssh
 
@@ -121,9 +113,10 @@ jobs:
           echo "  - ssh root@localhost (password: configured via secrets)"
           echo "  - ssh jiro@localhost (password: configured via secrets)"
           echo ""
-          echo "GOST Proxy:"
-          echo "  - SOCKS5: localhost:1080"
-          echo "  - HTTP:   localhost:8080"
+          echo "GOST Shadowsocks:"
+          echo "  - Port: 8888"
+          echo "  - Cipher: AEAD_CHACHA20_POLY1305"
+          echo "  - Password: 123456"
           echo ""
           if [ "${{ steps.tailscale.outputs.tailscale_connected }}" = "true" ]; then
             echo "Tailscale Network:"
