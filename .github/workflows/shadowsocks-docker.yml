@@ -23,8 +23,6 @@ on:
         description: 'Shadowsocks password (leave empty to use secret)'
         required: false
         default: ''
-  schedule:
-    - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:

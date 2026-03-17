@@ -11,8 +11,6 @@ on:
         description: 'Tailscale hostname prefix'
         required: false
         default: 'gh-hybrid-arm'
-  schedule:
-    - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:

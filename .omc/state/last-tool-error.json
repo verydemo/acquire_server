@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git push origin main\",\"description\":\"Retry push to GitHub\",\"timeout\":120000}",
+  "error": "Exit code 128\nfatal: unable to access 'https://github.com/verydemo/acquire_server.git/': Failed to connect to github.com port 443 after 75005 ms: Couldn't connect to server",
+  "timestamp": "2026-03-17T02:24:32.959Z",
+  "retry_count": 1
+}

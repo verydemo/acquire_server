@@ -2,8 +2,6 @@ name: Tailscale Node
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:

@@ -15,8 +15,6 @@ on:
         description: 'Web UI password (default: admin)'
         required: false
         default: 'admin'
-  schedule:
-    - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:
