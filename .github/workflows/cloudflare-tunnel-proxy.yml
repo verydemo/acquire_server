@@ -4,20 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       duration:
+        type: string
         description: 'Keep-alive duration in hours'
         required: false
         default: '5'
       proxy_mode:
+        type: string
         description: 'Proxy mode: ss (Shadowsocks) / vless (Xray VLESS+WS)'
         required: false
         default: 'vless'
       cf_tunnel_mode:
+        type: string
         description: 'Tunnel mode: quick (no account needed) / named (needs CF token)'
         required: false
         default: 'quick'
-  schedule:
-    - cron: "0 */5 * * *"
-  repository_dispatch:
 
 jobs:
   proxy-node:
