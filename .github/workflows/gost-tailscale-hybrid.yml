@@ -1,4 +1,4 @@
-name: GOST + Tailscale Hybrid Node
+name: Shadowsocks + Tailscale Hybrid Node
 
 on:
   workflow_dispatch:
@@ -50,30 +50,58 @@ jobs:
 
           echo "SSH configured: ssh root@localhost or ssh jiro@localhost"
 
-      - name: Install GOST
+      - name: Configure Firewall
         run: |
-          GOST_VERSION="2.12.0"
-          wget -q https://github.com/ginuerzh/gost/releases/download/v${GOST_VERSION}/gost_${GOST_VERSION}_linux_amd64.tar.gz
-          tar -xzf gost_${GOST_VERSION}_linux_amd64.tar.gz
-          sudo mv gost /usr/local/bin/
-          sudo chmod +x /usr/local/bin/gost
-          gost -V
-          echo "GOST installed: $(gost -V)"
+          # Open ports for Shadowsocks
+          sudo apt-get update
+          sudo apt-get install -y ufw
+          sudo ufw allow 22/tcp
+          sudo ufw allow 8888/tcp
+          sudo ufw allow 8888/udp
+          echo "y" | sudo ufw enable || true
+          sudo ufw status
 
       - name: Install Tailscale
         run: |
           curl -fsSL https://tailscale.com/install.sh | sudo sh
           echo "Tailscale installed: $(tailscale version)"
 
-      - name: Start GOST Tunnel
+      - name: Deploy Shadowsocks Container
+        id: shadowsocks
+        env:
+          SS_PASSWORD: '123456'
         run: |
-          # Start GOST Shadowsocks VPN tunnel
-          echo "Starting GOST Shadowsocks tunnel on port 8888..."
-          nohup gost -L=ss2://AEAD_CHACHA20_POLY1305:123456@:8888 > /tmp/gost.log 2>&1 &
+          # Get public IP
+          PUBLIC_IP=$(curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip)
+          echo "Public IP: ${PUBLIC_IP}"
 
-          sleep 2
-          echo "GOST process: $(pgrep gost)"
-          echo "GOST Shadowsocks tunnel running on :8888"
+          # Run Shadowsocks container
+          docker run -d \
+            --name shadowsocks \
+            --restart unless-stopped \
+            -p 8888:8888/tcp \
+            -p 8888:8888/udp \
+            ghcr.io/shadowsocks/ssserver-rust:latest \
+            ssserver -s "0.0.0.0:8888" \
+            -m "aes-256-gcm" \
+            -k "${SS_PASSWORD}"
+
+          sleep 3
+
+          # Verify container is running
+          if docker ps | grep -q shadowsocks; then
+            echo "Shadowsocks container started successfully"
+            echo "ss_running=true" >> $GITHUB_OUTPUT
+            echo "public_ip=${PUBLIC_IP}" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Failed to start Shadowsocks container"
+            docker logs shadowsocks
+            echo "ss_running=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Show container status
+          docker ps
+          docker logs shadowsocks 2>&1 | tail -20
 
       - name: Connect to Tailscale
         id: tailscale
@@ -113,9 +141,10 @@ jobs:
           echo "  - ssh root@localhost (password: configured via secrets)"
           echo "  - ssh jiro@localhost (password: configured via secrets)"
           echo ""
-          echo "GOST Shadowsocks:"
+          echo "Shadowsocks VPN (Docker):"
+          echo "  - Server: ${{ steps.shadowsocks.outputs.public_ip }}"
           echo "  - Port: 8888"
-          echo "  - Cipher: AEAD_CHACHA20_POLY1305"
+          echo "  - Cipher: aes-256-gcm"
           echo "  - Password: 123456"
           echo ""
           if [ "${{ steps.tailscale.outputs.tailscale_connected }}" = "true" ]; then
@@ -123,6 +152,11 @@ jobs:
             echo "  - IP: ${{ steps.tailscale.outputs.tailscale_ip }}"
             echo "  - SSH: ssh root@${{ steps.tailscale.outputs.tailscale_ip }}"
           fi
+          echo ""
+          echo "Useful Commands:"
+          echo "  - Check status: docker ps"
+          echo "  - View logs: docker logs shadowsocks"
+          echo "  - Restart: docker restart shadowsocks"
           echo "=========================================="
 
       - name: Keep Alive

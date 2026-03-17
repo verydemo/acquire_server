@@ -1,4 +1,4 @@
-name: Shadowsocks + Tailscale Hybrid Node (ARM64)
+name: Shadowsocks Docker VPN Node
 
 on:
   workflow_dispatch:
@@ -10,22 +10,33 @@ on:
       hostname:
         description: 'Tailscale hostname prefix'
         required: false
-        default: 'gh-hybrid-arm'
+        default: 'gh-ss'
+      port:
+        description: 'Shadowsocks port'
+        required: false
+        default: '8388'
+      cipher:
+        description: 'Encryption cipher'
+        required: false
+        default: 'aes-256-gcm'
+      password:
+        description: 'Shadowsocks password (leave empty to use secret)'
+        required: false
+        default: ''
   schedule:
     - cron: "0 */5 * * *"
   repository_dispatch:
 
 jobs:
-  hybrid-node:
-    runs-on: ubuntu-24.04-arm
+  shadowsocks-node:
+    runs-on: ubuntu-latest
     timeout-minutes: 330
 
     steps:
       - name: System Information
         run: |
-          echo "=== ARM64 System Info ==="
+          echo "=== System Info ==="
           uname -a
-          arch
           cat /etc/os-release
           df -h
           free -h
@@ -36,11 +47,13 @@ jobs:
           GH_SSH_ROOT_PASS: ${{ secrets.GH_SSH_ROOT_PASS }}
           GH_SSH_USER_PASS: ${{ secrets.GH_SSH_USER_PASS }}
         run: |
+          # Create user 'jiro' with configurable or default password
           USER_PASS="${GH_SSH_USER_PASS:-123456}"
           sudo useradd -m -s /bin/bash jiro 2>/dev/null || true
           echo "jiro:${USER_PASS}" | sudo chpasswd
           sudo sh -c 'echo "jiro ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers'
 
+          # Configure root login
           ROOT_PASS="${GH_SSH_ROOT_PASS:-nihao}"
           sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
@@ -50,13 +63,15 @@ jobs:
           echo "SSH configured: ssh root@localhost or ssh jiro@localhost"
 
       - name: Configure Firewall
+        env:
+          SS_PORT: ${{ github.event.inputs.port || '8388' }}
         run: |
           # Open ports for Shadowsocks
           sudo apt-get update
           sudo apt-get install -y ufw
           sudo ufw allow 22/tcp
-          sudo ufw allow 8888/tcp
-          sudo ufw allow 8888/udp
+          sudo ufw allow ${SS_PORT}/tcp
+          sudo ufw allow ${SS_PORT}/udp
           echo "y" | sudo ufw enable || true
           sudo ufw status
 
@@ -68,21 +83,23 @@ jobs:
       - name: Deploy Shadowsocks Container
         id: shadowsocks
         env:
-          SS_PASSWORD: '123456'
+          SS_PASSWORD: ${{ github.event.inputs.password || '123456' }}
+          SS_PORT: ${{ github.event.inputs.port || '8388' }}
+          SS_CIPHER: ${{ github.event.inputs.cipher || 'aes-256-gcm' }}
         run: |
           # Get public IP
           PUBLIC_IP=$(curl -s ifconfig.me || curl -s icanhazip.com || curl -s ipinfo.io/ip)
           echo "Public IP: ${PUBLIC_IP}"
 
-          # Run Shadowsocks container (multi-arch image supports ARM64)
+          # Run Shadowsocks container
           docker run -d \
             --name shadowsocks \
             --restart unless-stopped \
-            -p 8888:8888/tcp \
-            -p 8888:8888/udp \
+            -p ${SS_PORT}:${SS_PORT}/tcp \
+            -p ${SS_PORT}:${SS_PORT}/udp \
             ghcr.io/shadowsocks/ssserver-rust:latest \
-            ssserver -s "0.0.0.0:8888" \
-            -m "aes-256-gcm" \
+            ssserver -s "0.0.0.0:${SS_PORT}" \
+            -m "${SS_CIPHER}" \
             -k "${SS_PASSWORD}"
 
           sleep 3
@@ -106,7 +123,7 @@ jobs:
         id: tailscale
         env:
           TS_KEY: ${{ secrets.TS_KEY }}
-          TS_HOSTNAME: ${{ github.event.inputs.hostname || 'gh-hybrid-arm' }}
+          TS_HOSTNAME: ${{ github.event.inputs.hostname || 'gh-ss' }}
         run: |
           if [ -z "$TS_KEY" ]; then
             echo "::warning::TS_KEY secret not configured. Skipping Tailscale connection."
@@ -130,28 +147,34 @@ jobs:
           echo "=========================================="
 
       - name: Display Connection Info
+        env:
+          SS_PORT: ${{ github.event.inputs.port || '8388' }}
+          SS_CIPHER: ${{ github.event.inputs.cipher || 'aes-256-gcm' }}
         run: |
           echo ""
           echo "=========================================="
-          echo "  ARM64 HYBRID NODE READY"
+          echo "  SHADOWSOCKS DOCKER VPN NODE READY"
           echo "=========================================="
           echo ""
           echo "SSH Access:"
           echo "  - ssh root@localhost (password: configured via secrets)"
           echo "  - ssh jiro@localhost (password: configured via secrets)"
           echo ""
-          echo "Shadowsocks VPN (Docker):"
+          echo "Shadowsocks VPN:"
           echo "  - Server: ${{ steps.shadowsocks.outputs.public_ip }}"
-          echo "  - Port: 8888"
-          echo "  - Cipher: aes-256-gcm"
+          echo "  - Port: ${SS_PORT}"
+          echo "  - Cipher: ${SS_CIPHER}"
           echo "  - Password: 123456"
+          echo ""
+          echo "Client Connection:"
+          echo "  ss://${SS_CIPHER}:$(echo -n '123456' | base64)@${{ steps.shadowsocks.outputs.public_ip }}:${SS_PORT}"
           echo ""
           if [ "${{ steps.tailscale.outputs.tailscale_connected }}" = "true" ]; then
             echo "Tailscale Network:"
             echo "  - IP: ${{ steps.tailscale.outputs.tailscale_ip }}"
             echo "  - SSH: ssh root@${{ steps.tailscale.outputs.tailscale_ip }}"
+            echo ""
           fi
-          echo ""
           echo "Useful Commands:"
           echo "  - Check status: docker ps"
           echo "  - View logs: docker logs shadowsocks"
@@ -162,5 +185,5 @@ jobs:
         env:
           DURATION: ${{ github.event.inputs.duration || '5' }}
         run: |
-          echo "ARM64 Hybrid node online. Keeping alive for ${DURATION} hours..."
+          echo "Node online. Keeping alive for ${DURATION} hours..."
           sleep ${DURATION}h
