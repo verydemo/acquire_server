@@ -369,10 +369,9 @@ jobs:
           if [ "$PROXY_MODE" = "vless" ]; then
             CF_HOST=$(echo "${TUNNEL_URL}" | sed 's|https://||')
             VLESS_LINK="vless://${VLESS_UUID}@${CF_HOST}:443?encryption=none&security=tls&sni=${CF_HOST}&type=ws&host=${CF_HOST}&path=%2Fws#GH-CF-Proxy"
-            TEXT="## 🚀 Cloudflare Tunnel Proxy Ready (github)\n\n**Proxy Mode:** ${PROXY_MODE}\n\n**Tunnel URL:** ${TUNNEL_URL}\n\n### VLESS Link\n\`\`\`\n${VLESS_LINK}\n\`\`\`\n\n### Config\n| Parameter | Value |\n|-----------|-------|\n| Address | ${CF_HOST} |\n| Port | 443 |\n| UUID | ${VLESS_UUID} |\n| WS Path | /ws |\n| TLS | enabled |\n\n**SSH Tunnel:** ${SSH_TUNNEL_URL}\n"
-            message=$(printf '{"msgtype":"markdown","markdown":{"title":"🚀 Cloudflare Tunnel Proxy Ready","text":"%s"}}' "$TEXT")
+            message=$(printf '{"msgtype":"text","text":{"content":"github\n\n%s"}}' "$VLESS_LINK")
           else
-            CONTENT="🚀 Cloudflare Tunnel Proxy Ready (github)\n\nProxy Mode: ${PROXY_MODE}\nTunnel URL: ${TUNNEL_URL}\nSSH: ${SSH_TUNNEL_URL}\n\nShadowsocks config:\n  Server: ${TUNNEL_URL}\n  Port: 443\n  Cipher: aes-256-gcm"
+            CONTENT="github\n\nSS Server: ${TUNNEL_URL}\nPort: 443\nCipher: aes-256-gcm"
             message=$(printf '{"msgtype":"text","text":{"content":"%s"}}' "$CONTENT")
           fi
 
