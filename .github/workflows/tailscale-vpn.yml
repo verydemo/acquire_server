@@ -22,7 +22,6 @@ jobs:
           sudo sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo sed -i 's/PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo service ssh restart
-          sudo tailscale set --ssh
           echo "Root password configured"
         
       - name: Connect to Tailscale
@@ -40,7 +39,9 @@ jobs:
           echo "=========================================="
           echo "SSH: ssh root@gh-node"
           echo "=========================================="
+          sudo tailscale up --ssh --advertise-exit-node --reset
           tailscale status
+          
           
       - name: Keep Alive
         run: |
